@@ -867,6 +867,7 @@ export default function VideoFilmstrip({
         {/* Border size dropdown */}
         {onBorderLayerChange && borderLayerId && (
           <div className="flex items-center gap-2">
+            <span className="text-sm text-white">Select border width</span>
             <Select
               value={borderLayerId}
               onValueChange={(value) => {

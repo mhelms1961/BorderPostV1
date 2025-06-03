@@ -121,44 +121,12 @@ export default function VideoEditorStoryboard() {
         <Card className="bg-gray-900 border-gray-700 text-white">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-white">Video Editor</CardTitle>
-            <div className="flex gap-2">
-              <div className="flex items-center gap-2">
-                <Select
-                  value={selectedBorderLayerId}
-                  onValueChange={setSelectedBorderLayerId}
-                >
-                  <SelectTrigger className="w-[180px] bg-gray-800 text-white border-gray-600">
-                    <SelectValue placeholder="Select border" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-800 text-white border-gray-700">
-                    <SelectItem value="Border_1080_10px_ert7sl">
-                      1080p - 10px
-                    </SelectItem>
-                    <SelectItem value="Border_1080_20px_moefgp">
-                      1080p - 20px
-                    </SelectItem>
-                    <SelectItem value="Border_1080_40px_szde6u">
-                      1080p - 40px
-                    </SelectItem>
-                    <SelectItem value="Border_4K_10px_wnw98u">
-                      4K - 10px
-                    </SelectItem>
-                    <SelectItem value="Border_4K_20px_hwfmti">
-                      4K - 20px
-                    </SelectItem>
-                    <SelectItem value="Border_4K_40px_k66aor">
-                      4K - 40px
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <button
-                onClick={() => setShowEditor(false)}
-                className="text-sm text-blue-400 hover:text-blue-300 hover:underline"
-              >
-                Upload a different video
-              </button>
-            </div>
+            <button
+              onClick={() => setShowEditor(false)}
+              className="text-sm text-blue-400 hover:text-blue-300 hover:underline"
+            >
+              Upload a different video
+            </button>
           </CardHeader>
           <CardContent>
             <CloudinaryVideoEditor

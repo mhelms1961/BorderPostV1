@@ -71,9 +71,9 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
     return `${parts[0]}/upload/l_${borderLayerId},fl_layer_apply/${parts[1]}`;
   };
 
-  // Get the video URL with border overlay
+  // Get the video URL with border overlay - use selectedBorderLayerId instead of borderLayerId
   const getVideoUrlWithBorder = () => {
-    return applyBorderTransformation(videoUrl, borderLayerId);
+    return applyBorderTransformation(videoUrl, selectedBorderLayerId);
   };
 
   // Initialize video on mount
@@ -97,6 +97,11 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
   useEffect(() => {
     console.log("Current video URL with border:", currentVideoUrl);
   }, [currentVideoUrl]);
+
+  // Update border overlay when selectedBorderLayerId changes
+  useEffect(() => {
+    console.log("Selected border layer ID changed to:", selectedBorderLayerId);
+  }, [selectedBorderLayerId]);
 
   // Video event handlers
   const handleLoadedMetadata = () => {
@@ -312,7 +317,7 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
     // g_center positions the watermark in the center
     // fl_layer_apply applies the watermark layer
     // The border should be applied as a watermark that covers the entire video
-    return `https://res.cloudinary.com/${cloudName}/video/upload/so_${startOffset},eo_${endOffset}/l_${borderLayerId},g_center,w_1.0,h_1.0,fl_relative,fl_layer_apply/${cleanPublicId}.mp4`;
+    return `https://res.cloudinary.com/${cloudName}/video/upload/so_${startOffset},eo_${endOffset}/l_${selectedBorderLayerId},g_center,w_1.0,h_1.0,fl_relative,fl_layer_apply/${cleanPublicId}.mp4`;
   };
 
   const handleExportSubclip = () => {
@@ -523,12 +528,12 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
             id="cloudinary-video-player"
           />
 
-          {/* Border overlay with absolute positioning */}
+          {/* Border overlay with absolute positioning - use selectedBorderLayerId */}
           {isVideoLoaded && (
             <div
               className="absolute inset-0 pointer-events-none z-10"
               style={{
-                backgroundImage: `url(https://res.cloudinary.com/${cloudName}/image/upload/v1/${borderLayerId})`,
+                backgroundImage: `url(https://res.cloudinary.com/${cloudName}/image/upload/v1/${selectedBorderLayerId})`,
                 backgroundSize: "contain",
                 backgroundPosition: "center",
                 backgroundRepeat: "no-repeat",
@@ -636,7 +641,10 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
             onDownloadWithBorder={handleDownloadSubclip}
             showTrimControls={true}
             borderLayerId={selectedBorderLayerId}
-            onBorderLayerChange={(id) => setSelectedBorderLayerId(id)}
+            onBorderLayerChange={(id) => {
+              console.log("Border changed in filmstrip to:", id);
+              setSelectedBorderLayerId(id);
+            }}
             availableBorders={[
               { value: "Border_1080_10px_ert7sl", label: "1080p - 10px" },
               { value: "Border_1080_20px_moefgp", label: "1080p - 20px" },
