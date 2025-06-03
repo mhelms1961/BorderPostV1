@@ -1,0 +1,847 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BorderPost Video Download</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f9f9f9;
+      }
+      .container {
+        background-color: white;
+        border-radius: 8px;
+        padding: 30px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #2563eb;
+        margin-top: 0;
+      }
+      .download-btn {
+        background-color: #2563eb;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        font-size: 16px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 20px;
+        transition: background-color 0.2s;
+      }
+      .download-btn:hover {
+        background-color: #1d4ed8;
+      }
+      .download-icon {
+        width: 20px;
+        height: 20px;
+      }
+      .steps {
+        margin-top: 30px;
+        padding-left: 20px;
+      }
+      .steps li {
+        margin-bottom: 10px;
+      }
+      .note {
+        background-color: #f3f4f6;
+        padding: 15px;
+        border-left: 4px solid #2563eb;
+        margin-top: 30px;
+        border-radius: 4px;
+      }
+      .loading {
+        display: flex;
+        align-items: center;
+        margin-top: 20px;
+      }
+      .spinner {
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #2563eb;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        animation: spin 1s linear infinite;
+        margin-right: 10px;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+      .method-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 20px;
+      }
+      .method-btn {
+        background-color: #f3f4f6;
+        color: #333;
+        border: 1px solid #ddd;
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+      .method-btn:hover {
+        background-color: #e5e7eb;
+      }
+      .success-message {
+        background-color: #dcfce7;
+        color: #166534;
+        padding: 15px;
+        border-radius: 6px;
+        margin-top: 20px;
+        display: none;
+      }
+      .error-message {
+        background-color: #fee2e2;
+        color: #b91c1c;
+        padding: 15px;
+        border-radius: 6px;
+        margin-top: 20px;
+        display: none;
+      }
+      .video-preview {
+        margin-top: 30px;
+        border-radius: 8px;
+        overflow: hidden;
+        max-width: 100%;
+        display: none;
+      }
+      .debug-info {
+        margin-top: 20px;
+        padding: 10px;
+        background-color: #f0f9ff;
+        border: 1px solid #bae6fd;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+        overflow-x: auto;
+        display: none;
+      }
+      .debug-toggle {
+        background: none;
+        border: none;
+        color: #2563eb;
+        text-decoration: underline;
+        cursor: pointer;
+        font-size: 12px;
+        margin-top: 10px;
+        padding: 0;
+      }
+      .direct-links {
+        margin-top: 20px;
+        padding: 15px;
+        background-color: #f3f4f6;
+        border-radius: 6px;
+      }
+      .direct-links h3 {
+        margin-top: 0;
+        font-size: 16px;
+      }
+      .direct-links a {
+        display: block;
+        margin-bottom: 10px;
+        color: #2563eb;
+        text-decoration: none;
+      }
+      .direct-links a:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>BorderPost Video Download</h1>
+      <p>
+        Your trimmed video is ready to download. Click one of the buttons below
+        to start the download:
+      </p>
+
+      <button id="downloadBtn" class="download-btn">
+        <svg
+          class="download-icon"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+          />
+        </svg>
+        Download Video
+      </button>
+
+      <div class="method-buttons">
+        <button id="fetchDownloadBtn" class="method-btn">
+          Try Fetch API Download
+        </button>
+        <button id="blobDownloadBtn" class="method-btn">
+          Try Blob Download
+        </button>
+        <button id="previewBtn" class="method-btn">Preview Video</button>
+      </div>
+
+      <div id="loadingIndicator" class="loading" style="display: none">
+        <div class="spinner"></div>
+        <span id="loadingText">Processing download...</span>
+      </div>
+
+      <div id="successMessage" class="success-message">
+        Download successful! Check your downloads folder.
+      </div>
+
+      <div id="errorMessage" class="error-message">
+        Download failed. Please try another method or the manual download link
+        below.
+      </div>
+
+      <div id="videoPreview" class="video-preview">
+        <h3>Video Preview</h3>
+        <p>
+          Right-click on the video and select "Save Video As..." to download
+          manually:
+        </p>
+        <video id="previewVideo" controls style="width: 100%"></video>
+      </div>
+
+      <div id="directLinks" class="direct-links" style="display: none">
+        <h3>Direct Download Links</h3>
+        <p>Try these direct links if the buttons above don't work:</p>
+        <div id="directLinksContainer"></div>
+      </div>
+
+      <div class="steps">
+        <h3>If the download doesn't start automatically:</h3>
+        <ol>
+          <li>Try the "Preview Video" button to view the video</li>
+          <li>Right-click on the video and select "Save Video As..."</li>
+          <li>Choose a location on your computer to save the video</li>
+          <li>Click Save</li>
+        </ol>
+      </div>
+
+      <div class="note">
+        <p>
+          <strong>Note:</strong> If you encounter any issues, try a different
+          download method or use one of the direct download links.
+        </p>
+      </div>
+
+      <button id="toggleDebug" class="debug-toggle">Show Debug Info</button>
+      <div id="debugInfo" class="debug-info"></div>
+    </div>
+
+    <script>
+      // Get URL parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const videoUrl = urlParams.get("url");
+      const filename = urlParams.get("filename") || "video.mp4";
+
+      // Debug logging function
+      function logDebug(message, data) {
+        const debugInfo = document.getElementById("debugInfo");
+        const timestamp = new Date().toISOString().substr(11, 8);
+        let logMessage = `[${timestamp}] ${message}\n`;
+
+        if (data) {
+          if (typeof data === "object") {
+            try {
+              logMessage += JSON.stringify(data, null, 2) + "\n";
+            } catch (e) {
+              logMessage += String(data) + "\n";
+            }
+          } else {
+            logMessage += String(data) + "\n";
+          }
+        }
+
+        debugInfo.textContent += logMessage;
+        console.log(message, data || "");
+      }
+
+      // Toggle debug info visibility
+      document
+        .getElementById("toggleDebug")
+        .addEventListener("click", function () {
+          const debugInfo = document.getElementById("debugInfo");
+          const isVisible = debugInfo.style.display === "block";
+          debugInfo.style.display = isVisible ? "none" : "block";
+          this.textContent = isVisible ? "Show Debug Info" : "Hide Debug Info";
+        });
+
+      // Elements
+      const downloadBtn = document.getElementById("downloadBtn");
+      const fetchDownloadBtn = document.getElementById("fetchDownloadBtn");
+      const blobDownloadBtn = document.getElementById("blobDownloadBtn");
+      const previewBtn = document.getElementById("previewBtn");
+      const loadingIndicator = document.getElementById("loadingIndicator");
+      const loadingText = document.getElementById("loadingText");
+      const successMessage = document.getElementById("successMessage");
+      const errorMessage = document.getElementById("errorMessage");
+      const videoPreview = document.getElementById("videoPreview");
+      const previewVideo = document.getElementById("previewVideo");
+      const directLinks = document.getElementById("directLinks");
+      const directLinksContainer = document.getElementById(
+        "directLinksContainer",
+      );
+
+      // Show loading
+      function showLoading(message = "Processing download...") {
+        loadingText.textContent = message;
+        loadingIndicator.style.display = "flex";
+        successMessage.style.display = "none";
+        errorMessage.style.display = "none";
+      }
+
+      // Show success
+      function showSuccess(
+        message = "Download successful! Check your downloads folder.",
+      ) {
+        loadingIndicator.style.display = "none";
+        successMessage.textContent = message;
+        successMessage.style.display = "block";
+        errorMessage.style.display = "none";
+      }
+
+      // Show error
+      function showError(
+        message = "Download failed. Please try another method.",
+      ) {
+        loadingIndicator.style.display = "none";
+        successMessage.style.display = "none";
+        errorMessage.textContent = message;
+        errorMessage.style.display = "block";
+      }
+
+      // Generate alternative URLs for better compatibility
+      function generateAlternativeUrls(baseUrl) {
+        const urls = [];
+
+        // Original URL
+        urls.push({
+          name: "Original URL",
+          url: baseUrl,
+        });
+
+        // Extract components from the URL
+        const cloudNameMatch = baseUrl.match(/res\.cloudinary\.com\/([^\/]+)/);
+        const publicIdMatch = baseUrl.match(/\/([^\/]+\.mp4)$/);
+        const soMatch = baseUrl.match(/so_([\d\.]+)/);
+        const eoMatch = baseUrl.match(/eo_([\d\.]+)/);
+        const borderMatch =
+          baseUrl.match(/l_image:([^,\/]+)/) ||
+          baseUrl.match(/l_borders:([^,\/]+)/) ||
+          baseUrl.match(/l_Border_([^,\/]+)/);
+
+        if (cloudNameMatch && publicIdMatch) {
+          const cloudName = cloudNameMatch[1];
+          const publicId = publicIdMatch[1].replace(/\.mp4$/, "");
+
+          // URL with correct transformation order but no attachment flag
+          // Order: so_<in>,eo_<out>,l_image:<BorderId>,fl_relative,w_1.0,fl_layer_apply,f_mp4,vc_h264
+          const transformations = [];
+
+          // Add trim parameters FIRST
+          if (soMatch && eoMatch) {
+            transformations.push(`so_${soMatch[1]}`);
+            transformations.push(`eo_${eoMatch[1]}`);
+          }
+
+          // Add border AFTER trimming if available
+          if (borderMatch) {
+            const borderLayerId =
+              borderMatch[1] || borderMatch[2] || borderMatch[3];
+            // Ensure the border ID has the "Border_" prefix
+            const fullBorderId = borderLayerId.startsWith("Border_")
+              ? borderLayerId
+              : `Border_${borderLayerId}`;
+            transformations.push(`l_image:${fullBorderId}`);
+            transformations.push("fl_relative");
+            transformations.push("w_1.0");
+            transformations.push("fl_layer_apply");
+          }
+
+          // Add format and codec
+          transformations.push("f_mp4");
+          transformations.push("vc_h264");
+
+          const viewUrl = `https://res.cloudinary.com/${cloudName}/video/upload/${transformations.join(",")}/${publicId}.mp4`;
+          urls.push({
+            name: "Optimized URL for viewing",
+            url: viewUrl,
+          });
+
+          // URL with only trim parameters (no border)
+          if (soMatch && eoMatch) {
+            const trimOnlyUrl = `https://res.cloudinary.com/${cloudName}/video/upload/f_mp4,vc_h264,so_${soMatch[1]},eo_${eoMatch[1]}/${publicId}.mp4`;
+            urls.push({
+              name: "Trim only (no border)",
+              url: trimOnlyUrl,
+            });
+          }
+
+          // URL with download flag
+          const downloadUrl = `https://res.cloudinary.com/${cloudName}/video/upload/${transformations.join(",")},fl_attachment/${publicId}.mp4`;
+          urls.push({
+            name: "Download URL with attachment flag",
+            url: downloadUrl,
+          });
+        }
+
+        return urls;
+      }
+
+      if (videoUrl) {
+        // Decode the URL
+        const decodedUrl = decodeURIComponent(videoUrl);
+        logDebug("Original video URL:", decodedUrl);
+
+        // Process the URL to handle both transformation URLs and processed URLs
+        const processUrl = (url) => {
+          // For eager URLs from the explicit API, use as-is - these are already preprocessed
+          // Just ensure fl_attachment is added if needed for download
+          if (
+            !url.includes("fl_attachment") &&
+            !url.includes("?fl_attachment")
+          ) {
+            const processedUrl = url.includes("?")
+              ? `${url}&fl_attachment`
+              : `${url}?fl_attachment`;
+            logDebug("Added fl_attachment to URL", {
+              original: url,
+              processed: processedUrl,
+            });
+            return processedUrl;
+          }
+
+          logDebug("Using URL as-is (already has attachment flag)", {
+            url,
+          });
+          return url;
+        };
+
+        // Update the video URL with processed version
+        const processedUrl = processUrl(decodedUrl);
+        logDebug("Processed URL for compatibility:", processedUrl);
+
+        // Generate alternative URLs
+        const alternativeUrls = generateAlternativeUrls(processedUrl);
+        logDebug("Generated alternative URLs:", alternativeUrls);
+
+        // Add direct download links
+        directLinks.style.display = "block";
+        alternativeUrls.forEach((item, index) => {
+          const link = document.createElement("a");
+          link.href = item.url;
+          link.download = decodeURIComponent(filename);
+          link.target = "_blank";
+          link.textContent = `${index + 1}. ${item.name}`;
+          directLinksContainer.appendChild(link);
+        });
+
+        // Main download button
+        downloadBtn.addEventListener("click", function () {
+          showLoading("Starting download...");
+          logDebug("Main download button clicked");
+
+          try {
+            const link = document.createElement("a");
+            link.href = processedUrl;
+            link.download = decodeURIComponent(filename);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            showSuccess();
+            logDebug("Download initiated with direct link");
+          } catch (error) {
+            showError("Download failed: " + error.message);
+            logDebug("Download error:", error);
+          }
+        });
+
+        // Fetch API download
+        fetchDownloadBtn.addEventListener("click", async function () {
+          showLoading("Fetching video data...");
+          logDebug("Fetch API download button clicked");
+
+          try {
+            // Use the optimized URL for viewing (without attachment flag)
+            const fetchUrl =
+              alternativeUrls.find(
+                (u) => u.name === "Optimized URL for viewing",
+              )?.url || alternativeUrls[0].url;
+            logDebug("Fetching from URL:", fetchUrl);
+
+            // Show progress indicator
+            loadingText.textContent = "Downloading video data...";
+
+            // Use fetch with AbortController for timeout handling
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+
+            const response = await fetch(fetchUrl, {
+              signal: controller.signal,
+              headers: {
+                Accept: "video/mp4,video/*;q=0.9,*/*;q=0.8", // Prefer MP4
+              },
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+
+            const contentType = response.headers.get("content-type");
+            const contentLength = response.headers.get("content-length");
+
+            logDebug("Fetch response:", {
+              status: response.status,
+              contentType,
+              contentLength,
+            });
+
+            if (!contentType || !contentType.includes("video/")) {
+              logDebug("Warning: Response may not be a video", { contentType });
+            }
+
+            loadingText.textContent = "Processing video data...";
+            const blob = await response.blob();
+
+            // Ensure the blob is treated as an MP4 video
+            const videoBlob = new Blob([blob], { type: "video/mp4" });
+
+            logDebug("Blob created:", {
+              size: videoBlob.size,
+              type: videoBlob.type,
+            });
+
+            // Create a URL for the blob
+            const url = URL.createObjectURL(videoBlob);
+
+            // Show preview of the video to confirm it works
+            previewVideo.src = url;
+            videoPreview.style.display = "block";
+
+            // Create a download link
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = decodeURIComponent(filename);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            showSuccess(
+              "Fetch API download successful! Video is also available in the preview below.",
+            );
+
+            // Don't revoke the URL immediately so the preview works
+            setTimeout(() => URL.revokeObjectURL(url), 300000); // Clean up after 5 minutes
+          } catch (error) {
+            showError("Fetch API download failed: " + error.message);
+            logDebug("Fetch API error:", error);
+
+            // Try alternative URL as fallback
+            try {
+              const fallbackUrl = alternativeUrls.find(
+                (u) => u.name === "Trim only (no border)",
+              )?.url;
+              if (fallbackUrl) {
+                logDebug("Trying fallback URL without border:", fallbackUrl);
+                loadingText.textContent =
+                  "Trying alternative download method...";
+
+                const response = await fetch(fallbackUrl);
+                if (response.ok) {
+                  const blob = await response.blob();
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement("a");
+                  link.href = url;
+                  link.download = decodeURIComponent(filename).replace(
+                    ".mp4",
+                    "_no_border.mp4",
+                  );
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+
+                  showSuccess("Fallback download successful (without border)!");
+                }
+              }
+            } catch (fallbackError) {
+              logDebug("Fallback download also failed:", fallbackError);
+            }
+          }
+        });
+
+        // Blob download
+        blobDownloadBtn.addEventListener("click", async function () {
+          showLoading("Creating blob from video...");
+          logDebug("Blob download button clicked");
+
+          try {
+            // Use the optimized URL for viewing (without attachment flag)
+            const blobUrl =
+              alternativeUrls.find(
+                (u) => u.name === "Optimized URL for viewing",
+              )?.url || alternativeUrls[0].url;
+            logDebug("Using URL for blob download:", blobUrl);
+
+            // Create an XMLHttpRequest to get the video as a blob
+            const xhr = new XMLHttpRequest();
+            xhr.open("GET", blobUrl, true);
+            xhr.responseType = "blob";
+            xhr.timeout = 60000; // 60 second timeout
+
+            // Add proper headers to request MP4 format
+            xhr.setRequestHeader("Accept", "video/mp4,video/*;q=0.9,*/*;q=0.8");
+
+            xhr.onprogress = function (event) {
+              if (event.lengthComputable) {
+                const percentComplete = Math.round(
+                  (event.loaded / event.total) * 100,
+                );
+                loadingText.textContent = `Downloading: ${percentComplete}%`;
+                logDebug(`Download progress: ${percentComplete}%`);
+              } else {
+                loadingText.textContent = `Downloading: ${(event.loaded / 1024 / 1024).toFixed(1)} MB`;
+              }
+            };
+
+            xhr.onload = function () {
+              if (this.status === 200) {
+                // Ensure the blob is treated as an MP4 video
+                const blob = new Blob([this.response], { type: "video/mp4" });
+                logDebug("XHR blob created:", {
+                  size: blob.size,
+                  type: blob.type,
+                  responseType: this.responseType,
+                  responseContentType: this.getResponseHeader("Content-Type"),
+                });
+
+                // Create a URL for the blob
+                const url = URL.createObjectURL(blob);
+
+                // Show preview of the video to confirm it works
+                previewVideo.src = url;
+                videoPreview.style.display = "block";
+
+                // Create a download link
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = decodeURIComponent(filename);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                showSuccess(
+                  "Blob download successful! Video is also available in the preview below.",
+                );
+
+                // Don't revoke the URL immediately so the preview works
+                setTimeout(() => URL.revokeObjectURL(url), 300000); // Clean up after 5 minutes
+              } else {
+                throw new Error(`HTTP error! Status: ${this.status}`);
+              }
+            };
+
+            xhr.onerror = function () {
+              throw new Error("Network error occurred");
+            };
+
+            xhr.ontimeout = function () {
+              throw new Error("Request timed out after 60 seconds");
+            };
+
+            xhr.send();
+          } catch (error) {
+            showError("Blob download failed: " + error.message);
+            logDebug("Blob download error:", error);
+
+            // Try alternative URL as fallback
+            try {
+              const fallbackUrl = alternativeUrls.find(
+                (u) => u.name === "Trim only (no border)",
+              )?.url;
+              if (fallbackUrl) {
+                logDebug(
+                  "Trying fallback URL without border for blob download:",
+                  fallbackUrl,
+                );
+                loadingText.textContent =
+                  "Trying alternative download method...";
+
+                const xhr = new XMLHttpRequest();
+                xhr.open("GET", fallbackUrl, true);
+                xhr.responseType = "blob";
+
+                xhr.onload = function () {
+                  if (this.status === 200) {
+                    const blob = new Blob([this.response], {
+                      type: "video/mp4",
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.download = decodeURIComponent(filename).replace(
+                      ".mp4",
+                      "_no_border.mp4",
+                    );
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+
+                    showSuccess(
+                      "Fallback blob download successful (without border)!",
+                    );
+                  }
+                };
+
+                xhr.send();
+              }
+            } catch (fallbackError) {
+              logDebug("Fallback blob download also failed:", fallbackError);
+            }
+          }
+        });
+
+        // Preview video
+        previewBtn.addEventListener("click", function () {
+          showLoading("Loading video preview...");
+          logDebug("Preview button clicked");
+
+          try {
+            // Use the optimized URL for viewing
+            const previewUrl =
+              alternativeUrls.find(
+                (u) => u.name === "Optimized URL for viewing",
+              )?.url || alternativeUrls[0].url;
+            logDebug("Using URL for video preview:", previewUrl);
+
+            // Set crossOrigin to anonymous to avoid CORS issues
+            previewVideo.crossOrigin = "anonymous";
+            previewVideo.src = previewUrl;
+
+            previewVideo.onloadeddata = function () {
+              videoPreview.style.display = "block";
+              showSuccess("Video preview loaded successfully!");
+              logDebug("Video preview loaded", {
+                duration: previewVideo.duration,
+                videoWidth: previewVideo.videoWidth,
+                videoHeight: previewVideo.videoHeight,
+                readyState: previewVideo.readyState,
+                networkState: previewVideo.networkState,
+              });
+
+              // Add video metadata to debug info
+              const debugInfo = document.getElementById("debugInfo");
+              debugInfo.textContent += `\n--- Video Metadata ---\n`;
+              debugInfo.textContent += `Duration: ${previewVideo.duration} seconds\n`;
+              debugInfo.textContent += `Dimensions: ${previewVideo.videoWidth}x${previewVideo.videoHeight}\n`;
+              debugInfo.textContent += `Ready State: ${previewVideo.readyState}\n`;
+              debugInfo.textContent += `Network State: ${previewVideo.networkState}\n`;
+              debugInfo.textContent += `Can Play Type MP4: ${previewVideo.canPlayType("video/mp4")}\n`;
+              debugInfo.textContent += `Can Play Type H.264: ${previewVideo.canPlayType('video/mp4; codecs="avc1.42E01E"')}\n`;
+
+              // Auto-play the video
+              previewVideo
+                .play()
+                .catch((e) => logDebug("Auto-play failed:", e));
+            };
+
+            previewVideo.onerror = function () {
+              const errorCode = previewVideo.error
+                ? previewVideo.error.code
+                : "unknown";
+              const errorMessage = previewVideo.error
+                ? previewVideo.error.message
+                : "Unknown error";
+              showError(
+                `Video preview failed: ${errorMessage} (code: ${errorCode})`,
+              );
+              logDebug("Video preview error:", previewVideo.error);
+
+              // Try alternative URL - first try trim only, then original
+              const trimOnlyUrl = alternativeUrls.find(
+                (u) => u.name === "Trim only (no border)",
+              )?.url;
+              if (trimOnlyUrl) {
+                logDebug("Trying trim-only URL for preview:", trimOnlyUrl);
+                previewVideo.src = trimOnlyUrl;
+              } else {
+                // Try the original URL as last resort
+                logDebug("Trying original URL for preview");
+                previewVideo.src = alternativeUrls[0].url;
+              }
+            };
+          } catch (error) {
+            showError("Video preview failed: " + error.message);
+            logDebug("Preview error:", error);
+          }
+        });
+
+        // Auto-trigger download after a short delay
+        setTimeout(() => {
+          logDebug("Auto-triggering download");
+
+          // Use the URL with attachment flag for download
+          const downloadUrl =
+            alternativeUrls.find(
+              (u) => u.name === "Download URL with attachment flag",
+            )?.url || processedUrl;
+          logDebug("Auto-triggering download with URL:", downloadUrl);
+
+          // Create an anchor element for download
+          const downloadLink = document.createElement("a");
+          downloadLink.href = downloadUrl;
+          downloadLink.download = decodeURIComponent(filename);
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          document.body.removeChild(downloadLink);
+
+          // Also show the video preview
+          setTimeout(() => {
+            // Use the optimized URL for viewing
+            const previewUrl =
+              alternativeUrls.find(
+                (u) => u.name === "Optimized URL for viewing",
+              )?.url || alternativeUrls[0].url;
+            previewVideo.crossOrigin = "anonymous";
+            previewVideo.src = previewUrl;
+            videoPreview.style.display = "block";
+          }, 1000);
+        }, 1500);
+      } else {
+        downloadBtn.textContent = "No video URL provided";
+        downloadBtn.disabled = true;
+        fetchDownloadBtn.disabled = true;
+        blobDownloadBtn.disabled = true;
+        previewBtn.disabled = true;
+        logDebug("Error: No video URL provided in query parameters");
+      }
+    </script>
+  </body>
+</html>
