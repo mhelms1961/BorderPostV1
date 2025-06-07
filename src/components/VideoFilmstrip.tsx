@@ -18,6 +18,17 @@ import {
   RefreshCw,
   Download,
 } from "lucide-react";
+import {
+  ensureMP4Compatibility,
+  checkVideoCompatibility,
+} from "@/lib/cloudinary-utils";
+
+interface Subclip {
+  id: string;
+  startTime: number;
+  endTime: number;
+  name: string;
+}
 
 interface VideoFilmstripProps {
   videoUrl: string;
@@ -38,6 +49,7 @@ interface VideoFilmstripProps {
   borderLayerId?: string;
   onBorderLayerChange?: (id: string) => void;
   availableBorders?: Array<{ value: string; label: string }>;
+  onSubclipsChange?: (subclips: Subclip[]) => void;
 }
 
 export default function VideoFilmstrip({
@@ -66,6 +78,7 @@ export default function VideoFilmstrip({
     { value: "Border_4K_20px_hwfmti", label: "4K - 20px" },
     { value: "Border_4K_40px_k66aor", label: "4K - 40px" },
   ],
+  onSubclipsChange,
 }: VideoFilmstripProps) {
   const [frames, setFrames] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,22 +88,25 @@ export default function VideoFilmstrip({
   const [hoveredFrame, setHoveredFrame] = useState<number | null>(null);
   const [hoveredTime, setHoveredTime] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [subclips, setSubclips] = useState<Subclip[]>([]);
+  const [activeSubclipId, setActiveSubclipId] = useState<string | null>(null);
+  const [isMarkingMode, setIsMarkingMode] = useState(false);
+  const [pendingMarkIn, setPendingMarkIn] = useState<number | null>(null);
 
   const filmstripRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
-  // Number of frames to extract
-  const frameCount = 30;
+  // Reduced number of frames for better performance
+  const frameCount = 20; // Reduced from 30 to 20 for better performance
 
   // Calculate frame width dynamically based on container width
   const [containerWidth, setContainerWidth] = useState(0);
   const frameWidth =
     containerWidth > 0 ? Math.floor(containerWidth / frameCount) : 20; // px
 
-  // Extract frames using HTML5 Canvas
+  // Extract frames using HTML5 Canvas - Optimized for performance
   useEffect(() => {
-    // Force extraction on mount or when videoUrl changes, regardless of other conditions
     console.log("VideoFilmstrip: Starting frame extraction", {
       loading,
       framesLength: frames.length,
@@ -99,78 +115,22 @@ export default function VideoFilmstrip({
       duration,
     });
 
-    // Always reset state when videoUrl changes
-    if (videoUrl) {
+    // Only extract frames if we have a valid video URL and duration
+    if (videoUrl && duration > 0) {
       setLoading(true);
       setError(null);
       setFrames([]); // Clear existing frames
 
-      // Use a timeout to ensure we don't start extraction too early
+      // Use a longer timeout to avoid blocking the UI
       const extractionTimeout = setTimeout(() => {
-        // Create a new video element for frame extraction
-        const video = document.createElement("video");
-        video.crossOrigin = "anonymous";
-        video.muted = true;
-        video.preload = "metadata"; // Start with metadata only
-        video.playsInline = true; // Better mobile support
+        extractFramesOptimized();
+      }, 300);
 
-        // Set up event handlers before setting src
-        let metadataLoaded = false;
-
-        video.onloadedmetadata = () => {
-          metadataLoaded = true;
-          console.log("VideoFilmstrip: Video metadata loaded for extraction", {
-            duration: video.duration,
-            videoWidth: video.videoWidth,
-            videoHeight: video.videoHeight,
-          });
-
-          // Change preload strategy after metadata is loaded
-          video.preload = "auto";
-
-          // Wait a moment to ensure the video is ready for seeking
-          setTimeout(() => {
-            extractFrames(video);
-          }, 500);
-        };
-
-        video.onerror = () => {
-          const errorMessage = video.error
-            ? video.error.message
-            : "Unknown error";
-          console.error("VideoFilmstrip: Video error:", errorMessage);
-          setError(`Failed to load video: ${errorMessage}`);
-          setLoading(false);
-        };
-
-        // Set src after event handlers are established
-        video.src = videoUrl;
-
-        // Force load
-        video.load();
-
-        // Fallback if metadata never loads
-        const metadataTimeout = setTimeout(() => {
-          if (!metadataLoaded) {
-            console.warn(
-              "VideoFilmstrip: Metadata load timeout, attempting extraction anyway",
-            );
-            extractFrames(video);
-          }
-        }, 5000);
-
-        // Cleanup function for the timeout
-        return () => {
-          clearTimeout(metadataTimeout);
-        };
-      }, 300); // Short delay before starting extraction
-
-      // Cleanup function
       return () => {
         clearTimeout(extractionTimeout);
       };
     }
-  }, [videoUrl]); // Only depend on videoUrl to ensure extraction happens when URL changes
+  }, [videoUrl, duration]); // Depend on both videoUrl and duration
 
   // Set up resize observer to update container width
   useEffect(() => {
@@ -205,155 +165,128 @@ export default function VideoFilmstrip({
     frameWidth,
   );
 
-  // Add a debug useEffect to verify video element access
+  // Add a debug useEffect to verify video element access and sync with main video
   useEffect(() => {
     console.log("VideoFilmstrip mount effect running");
-    // Try to find the preview video element on mount and when videoUrl changes
-    const previewVideo = document.getElementById(
-      "preview-video",
-    ) as HTMLVideoElement;
-    if (previewVideo) {
-      console.log("✅ VideoFilmstrip: Found preview video element");
-      videoRef.current = previewVideo;
-      console.log(
-        "✅ VideoFilmstrip: Successfully set videoRef.current to preview-video element",
-      );
 
-      // Force frame extraction immediately when the video element is found
-      if (frames.length === 0 && !loading && !error) {
-        console.log("VideoFilmstrip: Forcing frame extraction");
-        setLoading(true);
-        setError(null);
+    // Try to find the video element - prioritize cloudinary-video-player
+    const videoElement = getPreviewVideo();
 
-        // Create a new video element for frame extraction
-        const extractionVideo = document.createElement("video");
-        extractionVideo.crossOrigin = "anonymous";
-        extractionVideo.muted = true;
-        extractionVideo.preload = "auto";
-        extractionVideo.src = videoUrl;
+    if (videoElement) {
+      console.log("✅ VideoFilmstrip: Found video element:", videoElement.id);
+      videoRef.current = videoElement;
 
-        // Set up event handlers for extraction
-        extractionVideo.onloadedmetadata = () => {
-          console.log("VideoFilmstrip: Extraction video metadata loaded");
-          extractFrames(extractionVideo).catch((err) => {
-            console.error("VideoFilmstrip: Error extracting frames:", err);
-            setError(`Failed to extract frames: ${err.message}`);
-            setLoading(false);
-          });
-        };
-
-        extractionVideo.onerror = () => {
-          const errorMessage = extractionVideo.error
-            ? extractionVideo.error.message
-            : "Unknown error";
-          console.error("VideoFilmstrip: Video error:", errorMessage);
-          setError(`Failed to load video: ${errorMessage}`);
-          setLoading(false);
-        };
-
-        extractionVideo.load();
-      }
-
-      // Add event listeners to the preview video to track its state
+      // Add event listeners to sync with the main video player
       const handleVideoPlay = () => {
-        console.log(
-          "Preview video started playing at",
-          previewVideo.currentTime,
-        );
+        console.log("Video started playing at", videoElement.currentTime);
+        setIsPlaying(true);
       };
 
       const handleVideoPause = () => {
-        console.log("Preview video paused at", previewVideo.currentTime);
+        console.log("Video paused at", videoElement.currentTime);
+        setIsPlaying(false);
       };
 
-      // Enhanced time update handler to sync filmstrip playhead with video
+      // Throttled time update handler to reduce performance impact
+      let timeUpdateThrottle: number | null = null;
       const handleVideoTimeUpdate = () => {
-        // Always update our currentTime state to match the video's current time
-        // This ensures the filmstrip playhead updates in real-time with every frame
-        if (onSeek) {
-          requestAnimationFrame(() => {
-            onSeek(previewVideo.currentTime);
-          });
+        if (onSeek && !timeUpdateThrottle) {
+          timeUpdateThrottle = window.setTimeout(() => {
+            onSeek(videoElement.currentTime);
+            timeUpdateThrottle = null;
+          }, 100); // Throttle to 10fps instead of 60fps
         }
       };
 
       const handleVideoSeeked = () => {
-        console.log("Video seeked to", previewVideo.currentTime);
-        // If the video is seeked outside our current selection, update the selection
-        if (
-          showTrimControls &&
-          (previewVideo.currentTime < startTime ||
-            previewVideo.currentTime > endTime)
-        ) {
-          // Create a new selection around the current time
-          const newStartTime = Math.max(0, previewVideo.currentTime - 2);
-          const newEndTime = Math.min(duration, previewVideo.currentTime + 8);
-          onStartTimeChange(newStartTime);
-          onEndTimeChange(newEndTime);
-          console.log(
-            `Updated selection to ${newStartTime}s - ${newEndTime}s based on video seek`,
-          );
-        }
+        console.log("Video seeked to", videoElement.currentTime);
       };
 
-      previewVideo.addEventListener("play", () => {
-        handleVideoPlay();
-        setIsPlaying(true);
-      });
-      previewVideo.addEventListener("pause", () => {
-        handleVideoPause();
-        setIsPlaying(false);
-      });
-      previewVideo.addEventListener("timeupdate", handleVideoTimeUpdate);
-      previewVideo.addEventListener("seeked", handleVideoSeeked);
+      // Add event listeners
+      videoElement.addEventListener("play", handleVideoPlay);
+      videoElement.addEventListener("pause", handleVideoPause);
+      videoElement.addEventListener("timeupdate", handleVideoTimeUpdate);
+      videoElement.addEventListener("seeked", handleVideoSeeked);
 
       return () => {
-        previewVideo.removeEventListener("play", () => {
-          handleVideoPlay();
-          setIsPlaying(true);
-        });
-        previewVideo.removeEventListener("pause", () => {
-          handleVideoPause();
-          setIsPlaying(false);
-        });
-        previewVideo.removeEventListener("timeupdate", handleVideoTimeUpdate);
-        previewVideo.removeEventListener("seeked", handleVideoSeeked);
+        // Clean up event listeners and throttle timeout
+        videoElement.removeEventListener("play", handleVideoPlay);
+        videoElement.removeEventListener("pause", handleVideoPause);
+        videoElement.removeEventListener("timeupdate", handleVideoTimeUpdate);
+        videoElement.removeEventListener("seeked", handleVideoSeeked);
+        if (timeUpdateThrottle) {
+          clearTimeout(timeUpdateThrottle);
+        }
       };
     } else {
-      console.warn(
-        "VideoFilmstrip: Could not find preview video element in second useEffect",
-      );
+      console.warn("VideoFilmstrip: Could not find video element");
     }
-  }, [
-    videoUrl,
-    startTime,
-    endTime,
-    duration,
-    onStartTimeChange,
-    onEndTimeChange,
-    frames.length,
-    loading,
-    error,
-    currentTime,
-    onSeek,
-    showTrimControls,
-  ]);
+  }, [videoUrl, onSeek]);
 
-  // Add a third useEffect to sync the video with our trim controls when they change
+  // Sync the video with our trim controls when they change
   useEffect(() => {
-    const previewVideo = document.getElementById(
-      "preview-video",
-    ) as HTMLVideoElement;
-    if (previewVideo) {
+    const videoElement = getPreviewVideo();
+    if (videoElement && startTime !== undefined) {
       // When trim controls change, update the video position to the start time
-      previewVideo.currentTime = startTime;
+      videoElement.currentTime = startTime;
       console.log(`Synced video position to trim start time: ${startTime}s`);
     }
   }, [startTime]);
 
-  // Function to extract frames
-  const extractFrames = async (video: HTMLVideoElement) => {
+  // Optimized frame extraction function for better performance
+  const extractFramesOptimized = async () => {
     try {
+      console.log("VideoFilmstrip: Starting optimized frame extraction");
+
+      // Create a new video element specifically for frame extraction
+      const video = document.createElement("video");
+      video.crossOrigin = "anonymous";
+      video.muted = true;
+      video.preload = "metadata"; // Changed from "auto" to "metadata" for faster loading
+      video.playsInline = true;
+
+      // Only use compatibility check for .mov files to avoid unnecessary processing of MP4s
+      const isMovFile = videoUrl.toLowerCase().includes(".mov");
+      const processedUrl = isMovFile
+        ? checkVideoCompatibility(videoUrl).recommendedUrl
+        : videoUrl;
+
+      console.log("VideoFilmstrip: Using URL for extraction:", processedUrl);
+
+      // Set up the video source
+      video.src = processedUrl;
+
+      // Wait for video to be ready with shorter timeout
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error("Video loading timeout"));
+        }, 8000); // Reduced timeout
+
+        video.onloadedmetadata = () => {
+          clearTimeout(timeout);
+          console.log("VideoFilmstrip: Video metadata loaded", {
+            duration: video.duration,
+            videoWidth: video.videoWidth,
+            videoHeight: video.videoHeight,
+          });
+          resolve();
+        };
+
+        video.onerror = () => {
+          clearTimeout(timeout);
+          reject(
+            new Error(
+              `Video loading error: ${video.error?.message || "Unknown error"}`,
+            ),
+          );
+        };
+
+        video.load();
+      });
+
+      // Reduced wait time for video readiness
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
 
@@ -361,9 +294,11 @@ export default function VideoFilmstrip({
         throw new Error("Could not create canvas context");
       }
 
-      // Set canvas size to match video dimensions
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 360;
+      // Use smaller canvas size for better performance
+      const targetWidth = Math.min(video.videoWidth || 640, 320);
+      const targetHeight = Math.min(video.videoHeight || 360, 180);
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
 
       const extractedFrames: string[] = [];
       const interval = duration / frameCount;
@@ -372,42 +307,75 @@ export default function VideoFilmstrip({
         `VideoFilmstrip: Extracting ${frameCount} frames at ${interval}s intervals`,
       );
 
-      // Extract frames at regular intervals
+      // Extract frames with optimized seeking and reduced delays
       for (let i = 0; i < frameCount; i++) {
-        const time = i * interval;
+        const time = Math.min(i * interval, duration - 0.1);
 
-        // Set video to specific time
-        video.currentTime = time;
+        try {
+          // Set video to specific time
+          video.currentTime = time;
 
-        // Wait for the video to update to the new time
-        await new Promise<void>((resolve, reject) => {
-          const timeUpdate = () => {
-            video.removeEventListener("seeked", timeUpdate);
-            resolve();
-          };
+          // Optimized seeking with shorter timeout
+          await new Promise<void>((resolve) => {
+            let resolved = false;
 
-          const errorHandler = () => {
-            video.removeEventListener("error", errorHandler);
-            reject(new Error("Error seeking video"));
-          };
+            const onSeeked = () => {
+              if (!resolved) {
+                resolved = true;
+                video.removeEventListener("seeked", onSeeked);
+                resolve();
+              }
+            };
 
-          video.addEventListener("seeked", timeUpdate);
-          video.addEventListener("error", errorHandler);
+            video.addEventListener("seeked", onSeeked);
 
-          // Add timeout to prevent hanging
-          const timeout = setTimeout(() => {
-            video.removeEventListener("seeked", timeUpdate);
-            video.removeEventListener("error", errorHandler);
-            resolve(); // Continue even if seeking times out
-          }, 1000);
-        });
+            // Much shorter timeout to prevent hanging
+            setTimeout(() => {
+              if (!resolved) {
+                resolved = true;
+                video.removeEventListener("seeked", onSeeked);
+                resolve();
+              }
+            }, 200); // Reduced from 500ms to 200ms
+          });
 
-        // Draw the video frame to the canvas
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          // Minimal delay for frame readiness
+          await new Promise((resolve) => setTimeout(resolve, 10)); // Reduced from 50ms to 10ms
 
-        // Convert the canvas to a data URL
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-        extractedFrames.push(dataUrl);
+          // Draw the video frame to the canvas
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+          // Convert to data URL with lower quality for better performance
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.6); // Reduced quality from 0.8 to 0.6
+          extractedFrames.push(dataUrl);
+
+          // Update frames progressively for better UX
+          if (i % 5 === 0) {
+            setFrames([...extractedFrames]);
+          }
+
+          console.log(
+            `VideoFilmstrip: Extracted frame ${i + 1}/${frameCount} at ${time.toFixed(2)}s`,
+          );
+        } catch (frameError) {
+          console.warn(
+            `VideoFilmstrip: Failed to extract frame ${i} at ${time}s:`,
+            frameError,
+          );
+          // Create a simple placeholder frame
+          ctx.fillStyle = "#333";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.fillStyle = "#fff";
+          ctx.font = "12px Arial";
+          ctx.textAlign = "center";
+          ctx.fillText(
+            `${time.toFixed(1)}s`,
+            canvas.width / 2,
+            canvas.height / 2,
+          );
+          const placeholderUrl = canvas.toDataURL("image/jpeg", 0.6);
+          extractedFrames.push(placeholderUrl);
+        }
       }
 
       console.log(
@@ -415,9 +383,13 @@ export default function VideoFilmstrip({
       );
       setFrames(extractedFrames);
       setLoading(false);
+      setError(null);
     } catch (err) {
       console.error("VideoFilmstrip: Error extracting frames:", err);
-      throw err;
+      setError(
+        `Failed to extract frames: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      setLoading(false);
     }
   };
 
@@ -432,7 +404,7 @@ export default function VideoFilmstrip({
     return (position / containerWidth) * duration;
   };
 
-  // Direct click on filmstrip to seek
+  // Enhanced click on filmstrip to seek and handle playhead movement
   const handleFilmstripClick = (e: React.MouseEvent) => {
     if (isDraggingStart || isDraggingEnd) return; // Don't seek if we're dragging markers
 
@@ -441,10 +413,15 @@ export default function VideoFilmstrip({
     const position = e.clientX - rect.left;
     const time = getTimeFromPosition(position);
 
+    // Move playhead to clicked position
+    const video = getPreviewVideo();
+    if (video) {
+      video.currentTime = time;
+      console.log(`Playhead moved to ${time.toFixed(2)}s via filmstrip click`);
+    }
+
     if (onSeek) {
       onSeek(time);
-    } else if (videoRef.current) {
-      videoRef.current.currentTime = time;
     }
   };
 
@@ -519,14 +496,29 @@ export default function VideoFilmstrip({
     handleMouseUp();
   };
 
-  // Video control functions - Updated to use preview-video element consistently
+  // Video control functions - Updated to use cloudinary-video-player element consistently
   const getPreviewVideo = () => {
-    return (
-      (document.getElementById(
-        "cloudinary-video-player",
-      ) as HTMLVideoElement) ||
-      (document.getElementById("preview-video") as HTMLVideoElement)
-    );
+    // First try to get the cloudinary video player, then fallback to preview-video
+    const cloudinaryPlayer = document.getElementById(
+      "cloudinary-video-player",
+    ) as HTMLVideoElement;
+
+    if (cloudinaryPlayer) {
+      console.log("VideoFilmstrip: Using cloudinary-video-player element");
+      return cloudinaryPlayer;
+    }
+
+    const previewVideo = document.getElementById(
+      "preview-video",
+    ) as HTMLVideoElement;
+
+    if (previewVideo) {
+      console.log("VideoFilmstrip: Using preview-video element");
+      return previewVideo;
+    }
+
+    console.warn("VideoFilmstrip: No video element found");
+    return null;
   };
 
   const handleSkipBackward = () => {
@@ -564,35 +556,116 @@ export default function VideoFilmstrip({
     if (onSeek) onSeek(newTime);
   };
 
-  // Mark In/Out functions - Updated to use preview video element
+  // Enhanced Mark In/Out functions for multiple subclips
   const handleMarkIn = () => {
     const video = getPreviewVideo();
     if (!video) return;
     const time = video.currentTime;
+
+    // Set pending mark in and enter marking mode
+    setPendingMarkIn(time);
+    setIsMarkingMode(true);
     onStartTimeChange(time);
-    console.log(`Marked IN point at ${time.toFixed(2)}s`);
+    console.log(
+      `Marked IN point at ${time.toFixed(2)}s - waiting for OUT point`,
+    );
   };
 
   const handleMarkOut = () => {
     const video = getPreviewVideo();
     if (!video) return;
     const time = video.currentTime;
-    onEndTimeChange(time);
-    console.log(`Marked OUT point at ${time.toFixed(2)}s`);
+
+    if (pendingMarkIn !== null && time > pendingMarkIn) {
+      // Create new subclip
+      const newSubclip: Subclip = {
+        id: `subclip-${Date.now()}`,
+        startTime: pendingMarkIn,
+        endTime: time,
+        name: `Subclip ${subclips.length + 1}`,
+      };
+
+      const updatedSubclips = [...subclips, newSubclip];
+      setSubclips(updatedSubclips);
+      setActiveSubclipId(newSubclip.id);
+
+      // Update current selection to the new subclip
+      onStartTimeChange(pendingMarkIn);
+      onEndTimeChange(time);
+
+      // Reset marking mode
+      setPendingMarkIn(null);
+      setIsMarkingMode(false);
+
+      // Notify parent component
+      if (onSubclipsChange) {
+        onSubclipsChange(updatedSubclips);
+      }
+
+      console.log(
+        `Created subclip: ${newSubclip.name} (${pendingMarkIn.toFixed(2)}s - ${time.toFixed(2)}s)`,
+      );
+    } else {
+      // Just set the end time for current selection
+      onEndTimeChange(time);
+      console.log(`Marked OUT point at ${time.toFixed(2)}s`);
+    }
   };
 
-  // Delete subclip function
-  const handleDeleteSubclip = () => {
-    // Reset to full video duration
-    onStartTimeChange(0);
-    onEndTimeChange(duration);
-    console.log("Subclip deleted, reset to full video duration");
+  // Enhanced subclip management functions
+  const handleDeleteSubclip = (subclipId?: string) => {
+    if (subclipId) {
+      // Delete specific subclip
+      const updatedSubclips = subclips.filter((clip) => clip.id !== subclipId);
+      setSubclips(updatedSubclips);
+
+      if (activeSubclipId === subclipId) {
+        setActiveSubclipId(null);
+        // Reset to full video duration
+        onStartTimeChange(0);
+        onEndTimeChange(duration);
+      }
+
+      if (onSubclipsChange) {
+        onSubclipsChange(updatedSubclips);
+      }
+
+      console.log(`Deleted subclip: ${subclipId}`);
+    } else {
+      // Reset current selection to full video duration
+      onStartTimeChange(0);
+      onEndTimeChange(duration);
+      setActiveSubclipId(null);
+      console.log("Reset selection to full video duration");
+    }
 
     // Optionally seek to beginning
-    if (videoRef.current) {
-      videoRef.current.currentTime = 0;
+    const video = getPreviewVideo();
+    if (video) {
+      video.currentTime = 0;
       if (onSeek) onSeek(0);
     }
+  };
+
+  const handleSelectSubclip = (subclip: Subclip) => {
+    setActiveSubclipId(subclip.id);
+    onStartTimeChange(subclip.startTime);
+    onEndTimeChange(subclip.endTime);
+
+    // Seek to start of subclip
+    const video = getPreviewVideo();
+    if (video) {
+      video.currentTime = subclip.startTime;
+      if (onSeek) onSeek(subclip.startTime);
+    }
+
+    console.log(`Selected subclip: ${subclip.name}`);
+  };
+
+  const handleClearMarkingMode = () => {
+    setPendingMarkIn(null);
+    setIsMarkingMode(false);
+    console.log("Cleared marking mode");
   };
 
   // Handle keyboard shortcuts
@@ -616,6 +689,16 @@ export default function VideoFilmstrip({
       if (e.code === "Space") {
         e.preventDefault();
         handleTogglePlayPause();
+      }
+      if (e.code === "Escape") {
+        e.preventDefault();
+        handleClearMarkingMode();
+      }
+      if (e.code === "Delete" || e.code === "Backspace") {
+        if (activeSubclipId) {
+          e.preventDefault();
+          handleDeleteSubclip(activeSubclipId);
+        }
       }
     };
 
@@ -674,11 +757,74 @@ export default function VideoFilmstrip({
 
   return (
     <div className="w-full">
-      <div className="mb-2 flex justify-between text-sm text-gray-500">
-        <span>Start: {startTime.toFixed(1)}s</span>
-        <span>End: {endTime.toFixed(1)}s</span>
-        <span>Duration: {(endTime - startTime).toFixed(1)}s</span>
+      {/* Enhanced status display */}
+      <div className="mb-2 flex justify-between items-center text-sm">
+        <div className="flex gap-4 text-gray-500">
+          <span>Start: {startTime.toFixed(1)}s</span>
+          <span>End: {endTime.toFixed(1)}s</span>
+          <span>Duration: {(endTime - startTime).toFixed(1)}s</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {isMarkingMode && (
+            <div className="flex items-center gap-2 text-orange-400">
+              <span className="text-xs font-medium">MARKING MODE</span>
+              <span className="text-xs">Mark OUT point to create subclip</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleClearMarkingMode}
+                className="h-6 px-2 text-xs text-orange-400 hover:text-orange-300"
+              >
+                Cancel (ESC)
+              </Button>
+            </div>
+          )}
+          {subclips.length > 0 && (
+            <span className="text-xs text-blue-400">
+              {subclips.length} subclip{subclips.length !== 1 ? "s" : ""}{" "}
+              created
+            </span>
+          )}
+        </div>
       </div>
+
+      {/* Subclips list */}
+      {subclips.length > 0 && (
+        <div className="mb-4 p-3 bg-gray-800 rounded-md">
+          <div className="text-sm font-medium text-white mb-2">
+            Created Subclips:
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {subclips.map((subclip) => (
+              <div
+                key={subclip.id}
+                className={`flex items-center gap-2 px-3 py-1 rounded text-xs cursor-pointer transition-colors ${
+                  activeSubclipId === subclip.id
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                }`}
+                onClick={() => handleSelectSubclip(subclip)}
+              >
+                <span>{subclip.name}</span>
+                <span className="text-gray-400">
+                  ({subclip.startTime.toFixed(1)}s -{" "}
+                  {subclip.endTime.toFixed(1)}s)
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteSubclip(subclip.id);
+                  }}
+                  className="ml-1 text-red-400 hover:text-red-300"
+                  title="Delete subclip"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div
         className="relative h-24 bg-black rounded-md mb-4 overflow-y-visible"
@@ -774,15 +920,57 @@ export default function VideoFilmstrip({
             }}
           />
 
-          {/* Current time indicator (playhead) */}
+          {/* Enhanced playhead with better visibility */}
           <div
-            className="absolute top-0 bottom-0 w-0.5 bg-red-500 pointer-events-none z-30"
+            className="absolute top-0 bottom-0 w-1 bg-red-500 pointer-events-none z-30 shadow-lg"
             style={{ left: getPositionFromTime(currentTime) + "px" }}
           >
-            <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-black text-white text-xs px-1 py-0.5 rounded">
+            <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-red-500 text-white text-xs px-2 py-1 rounded font-medium shadow-lg">
               {currentTime.toFixed(1)}s
             </div>
+            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1 w-0 h-0 border-l-2 border-r-2 border-b-4 border-transparent border-b-red-500" />
           </div>
+
+          {/* Pending mark in indicator */}
+          {pendingMarkIn !== null && (
+            <div
+              className="absolute top-0 bottom-0 w-1 bg-orange-500 pointer-events-none z-25 animate-pulse"
+              style={{ left: getPositionFromTime(pendingMarkIn) + "px" }}
+            >
+              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-orange-500 text-white text-xs px-2 py-1 rounded font-medium">
+                IN: {pendingMarkIn.toFixed(1)}s
+              </div>
+            </div>
+          )}
+
+          {/* Subclip indicators */}
+          {subclips.map((subclip) => (
+            <div
+              key={`indicator-${subclip.id}`}
+              className={`absolute top-0 bottom-0 border-2 pointer-events-none z-15 ${
+                activeSubclipId === subclip.id
+                  ? "bg-blue-500/20 border-blue-500"
+                  : "bg-purple-500/10 border-purple-500"
+              }`}
+              style={{
+                left: getPositionFromTime(subclip.startTime) + "px",
+                width:
+                  getPositionFromTime(subclip.endTime) -
+                  getPositionFromTime(subclip.startTime) +
+                  "px",
+              }}
+            >
+              <div
+                className={`absolute -top-6 left-1 text-xs px-1 py-0.5 rounded font-medium ${
+                  activeSubclipId === subclip.id
+                    ? "bg-blue-500 text-white"
+                    : "bg-purple-500 text-white"
+                }`}
+              >
+                {subclip.name}
+              </div>
+            </div>
+          ))}
 
           {/* Hover time indicator */}
           {hoveredTime !== null && hoveredTime !== currentTime && (
@@ -892,9 +1080,19 @@ export default function VideoFilmstrip({
       </div>
 
       <div className="mt-2 text-xs text-gray-500 text-center">
-        Keyboard shortcuts: <span className="font-medium">I</span> = Mark In,{" "}
-        <span className="font-medium">O</span> = Mark Out,{" "}
-        <span className="font-medium">Space</span> = Play/Pause
+        <div className="mb-1">
+          <span className="font-medium text-white">
+            Enhanced Filmstrip Controls:
+          </span>{" "}
+          Click anywhere to move playhead
+        </div>
+        <div>
+          Keyboard shortcuts: <span className="font-medium">I</span> = Mark In,{" "}
+          <span className="font-medium">O</span> = Mark Out,{" "}
+          <span className="font-medium">Space</span> = Play/Pause,{" "}
+          <span className="font-medium">ESC</span> = Cancel Marking,{" "}
+          <span className="font-medium">DEL</span> = Delete Selected Subclip
+        </div>
       </div>
     </div>
   );

@@ -18,6 +18,10 @@ import {
   Download,
 } from "lucide-react";
 import VideoFilmstrip from "./VideoFilmstrip";
+import {
+  ensureMP4Compatibility,
+  checkVideoCompatibility,
+} from "@/lib/cloudinary-utils";
 
 interface CloudinaryVideoEditorProps {
   videoUrl?: string;
@@ -76,6 +80,22 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
     return applyBorderTransformation(videoUrl, selectedBorderLayerId);
   };
 
+  // Get compatibility-optimized video URL
+  const getOptimizedVideoUrl = () => {
+    const compatibility = checkVideoCompatibility(videoUrl);
+    console.log("Video compatibility check:", compatibility);
+
+    if (compatibility.needsConversion) {
+      console.log(
+        "Using MP4-converted URL for better compatibility:",
+        compatibility.recommendedUrl,
+      );
+      return compatibility.recommendedUrl;
+    }
+
+    return videoUrl;
+  };
+
   // Initialize video on mount
   useEffect(() => {
     console.log("CloudinaryVideoEditor: Initializing with URL:", videoUrl);
@@ -88,6 +108,33 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
     setIsPlaying(false);
     setMarkIn(null);
     setMarkOut(null);
+
+    // Check compatibility and show appropriate status
+    const compatibility = checkVideoCompatibility(videoUrl);
+    if (compatibility.isMovFile) {
+      console.log(
+        "Detected .mov file, compatibility notes:",
+        compatibility.compatibilityNotes,
+      );
+      setLoadingStatus(
+        compatibility.needsConversion
+          ? "Converting .mov for compatibility..."
+          : "Loading .mov file...",
+      );
+
+      // Test browser codec support
+      const testVideo = document.createElement("video");
+      const canPlayMov = testVideo.canPlayType("video/quicktime");
+      const canPlayMp4 = testVideo.canPlayType(
+        'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
+      );
+
+      console.log("Browser codec support:", {
+        mov: canPlayMov,
+        mp4: canPlayMp4,
+        userAgent: navigator.userAgent,
+      });
+    }
   }, [videoUrl]);
 
   // Get the video URL with border overlay
@@ -111,7 +158,25 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
       duration: videoRef.current.duration,
       width: videoRef.current.videoWidth,
       height: videoRef.current.videoHeight,
+      readyState: videoRef.current.readyState,
+      networkState: videoRef.current.networkState,
+      videoTracks: videoRef.current.videoTracks?.length || 0,
+      audioTracks: videoRef.current.audioTracks?.length || 0,
     });
+
+    // Check if video dimensions are valid
+    if (
+      videoRef.current.videoWidth === 0 ||
+      videoRef.current.videoHeight === 0
+    ) {
+      console.warn("Video dimensions are 0, this might indicate a codec issue");
+      setLoadingStatus("Video loaded but no video track detected");
+    } else {
+      console.log(
+        "✅ Video track detected with dimensions:",
+        videoRef.current.videoWidth + "x" + videoRef.current.videoHeight,
+      );
+    }
 
     setDuration(videoRef.current.duration);
     setMarkOut(videoRef.current.duration); // Initialize mark out to end of video
@@ -309,8 +374,11 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
     const startOffset = markIn.toFixed(2);
     const endOffset = markOut.toFixed(2);
 
-    // Fixed Cloudinary URL format - remove .mp4 extension and use proper syntax
-    const cleanPublicId = effectivePublicId.replace(/\.(mp4|mov|avi)$/i, "");
+    // Fixed Cloudinary URL format - remove video file extensions and use proper syntax
+    const cleanPublicId = effectivePublicId.replace(
+      /\.(mp4|mov|avi|webm)$/i,
+      "",
+    );
 
     // Use proper Cloudinary watermark syntax for video overlays
     // Apply trimming first, then apply border as watermark with proper positioning
@@ -509,7 +577,7 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
           {/* Video element - using original URL without border */}
           <video
             ref={videoRef}
-            src={videoUrl} /* Use original URL without border transformation */
+            src={getOptimizedVideoUrl()} /* Use compatibility-optimized URL */
             className="w-full h-full block"
             style={{
               objectFit: "contain",
@@ -522,10 +590,45 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
             onEnded={() => setIsPlaying(false)}
+            onError={(e) => {
+              console.error("Video error:", e.currentTarget.error);
+              setLoadingStatus(
+                `Video error: ${e.currentTarget.error?.message || "Unknown error"}`,
+              );
+            }}
+            onLoadStart={() => {
+              console.log("Video load started");
+              setLoadingStatus("Loading video...");
+            }}
+            onLoadedData={() => {
+              console.log("Video data loaded");
+              setLoadingStatus("Video data loaded");
+            }}
+            onCanPlay={() => {
+              console.log("Video can play - basic playback ready");
+              setLoadingStatus("Video ready for playback");
+            }}
+            onSeeked={() => {
+              console.log("Video seeked to:", videoRef.current?.currentTime);
+            }}
+            onWaiting={() => {
+              console.log("Video waiting for data");
+            }}
+            onPlaying={() => {
+              console.log("Video is playing");
+              setIsPlaying(true);
+            }}
             preload="auto"
             crossOrigin="anonymous"
             playsInline
+            webkit-playsinline="true"
+            controls={false}
+            muted={false}
             id="cloudinary-video-player"
+            // Add explicit codec support for .mov files
+            {...(videoUrl.toLowerCase().includes(".mov") && {
+              "data-codec-hint": "h264,aac",
+            })}
           />
 
           {/* Border overlay with absolute positioning - use selectedBorderLayerId */}

@@ -3,6 +3,68 @@
  */
 
 /**
+ * Converts a Cloudinary video URL to use MP4 format for better browser compatibility
+ * This is especially useful for .mov files that may not play properly in all browsers
+ * @param url The original Cloudinary video URL
+ * @returns URL with MP4 format conversion applied
+ */
+export function ensureMP4Compatibility(url: string): string {
+  if (!url.includes("cloudinary.com")) {
+    return url; // Not a Cloudinary URL, return as-is
+  }
+
+  // Check if format conversion is already applied
+  if (url.includes("f_mp4") || url.includes("f_auto")) {
+    return url; // Already has format conversion
+  }
+
+  const parts = url.split("/upload/");
+  if (parts.length !== 2) {
+    return url; // Invalid URL format
+  }
+
+  // Add MP4 format conversion
+  return `${parts[0]}/upload/f_mp4/${parts[1]}`;
+}
+
+/**
+ * Checks if a video URL is likely to have codec compatibility issues
+ * @param url The video URL to check
+ * @returns Object with compatibility info
+ */
+export function checkVideoCompatibility(url: string): {
+  isMovFile: boolean;
+  needsConversion: boolean;
+  recommendedUrl: string;
+  compatibilityNotes: string[];
+} {
+  const isMovFile = url.toLowerCase().includes(".mov");
+  const notes: string[] = [];
+
+  if (isMovFile) {
+    notes.push(
+      ".mov files may have codec compatibility issues in some browsers",
+    );
+    notes.push("Consider using MP4 format for better compatibility");
+  }
+
+  const needsConversion =
+    isMovFile && url.includes("cloudinary.com") && !url.includes("f_mp4");
+  const recommendedUrl = needsConversion ? ensureMP4Compatibility(url) : url;
+
+  if (needsConversion) {
+    notes.push("Cloudinary format conversion to MP4 recommended");
+  }
+
+  return {
+    isMovFile,
+    needsConversion,
+    recommendedUrl,
+    compatibilityNotes: notes,
+  };
+}
+
+/**
  * Generates a Cloudinary URL with transformations using comma-separated format
  * @param cloudName The Cloudinary cloud name
  * @param publicId The public ID of the video

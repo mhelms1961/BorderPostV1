@@ -49,7 +49,8 @@ export default function CloudinaryUploadHelper({
     if (!file) return;
 
     const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-    const uploadPreset = "ml_default"; // Use unsigned upload preset
+    const uploadPreset =
+      import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "video_borders";
 
     if (!cloudName) {
       onUploadError("Cloudinary cloud name is not configured");
@@ -125,7 +126,7 @@ export default function CloudinaryUploadHelper({
                   Drag and drop your video here
                 </p>
                 <p className="text-sm text-gray-500 mt-1">
-                  or click to browse (MP4, WebM, MOV files)
+                  or click to browse (MP4, MOV, WebM files)
                 </p>
               </div>
               <Button
