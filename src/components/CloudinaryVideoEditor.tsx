@@ -54,6 +54,7 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
   const [loadingStatus, setLoadingStatus] = useState("Loading video...");
   const [selectedBorderLayerId, setSelectedBorderLayerId] =
     useState(borderLayerId);
+  const [isPreviewingSubclip, setIsPreviewingSubclip] = useState(false);
   // Border is applied ONLY via Cloudinary transformation in the URL
   // No CSS or HTML styling is used for the border
 
@@ -195,9 +196,18 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
     setCurrentTime(videoRef.current.currentTime);
 
     // Check if we've reached the mark out point during playback
-    if (markOut !== null && videoRef.current.currentTime >= markOut) {
+    // Only pause at mark out point if we're playing a subclip preview
+    if (
+      markOut !== null &&
+      videoRef.current.currentTime >= markOut &&
+      isPreviewingSubclip
+    ) {
       videoRef.current.pause();
+      // Set the current time exactly to the mark out point to ensure we stop on that frame
+      videoRef.current.currentTime = markOut;
+      setCurrentTime(markOut);
       setIsPlaying(false);
+      setIsPreviewingSubclip(false); // Reset preview mode
       console.log(`Reached mark out point at ${markOut.toFixed(2)}s`);
     }
   };
@@ -211,9 +221,29 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
 
     console.log("Play button clicked");
 
-    // If we have mark in/out points, start from mark in
+    // If we have mark in/out points and we're before the mark in, start from mark in
     if (markIn !== null && videoRef.current.currentTime < markIn) {
       videoRef.current.currentTime = markIn;
+    }
+
+    // Only adjust position if we're in preview mode
+    // This allows normal playback to continue past mark out when not previewing
+    if (isPreviewingSubclip) {
+      // If we're at the mark out point, move slightly before it to allow playback
+      if (
+        markOut !== null &&
+        Math.abs(videoRef.current.currentTime - markOut) < 0.1
+      ) {
+        console.log(
+          "At mark out point, moving slightly before to allow playback",
+        );
+        // Move 0.5 seconds before mark out or to mark in, whichever is greater
+        const newPosition =
+          markIn !== null
+            ? Math.max(markIn, markOut - 0.5)
+            : Math.max(0, markOut - 0.5);
+        videoRef.current.currentTime = newPosition;
+      }
     }
 
     // Use setTimeout to ensure any state updates have completed
@@ -268,6 +298,12 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
     console.log("Pause button clicked");
     videoRef.current.pause();
     setIsPlaying(false);
+
+    // If we're in preview mode and manually paused, exit preview mode
+    if (isPreviewingSubclip) {
+      setIsPreviewingSubclip(false);
+      console.log("Exiting subclip preview mode due to manual pause");
+    }
   };
 
   const handleStop = () => {
@@ -277,6 +313,12 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
     videoRef.current.pause();
     videoRef.current.currentTime = 0;
     setIsPlaying(false);
+
+    // Exit preview mode when stopping
+    if (isPreviewingSubclip) {
+      setIsPreviewingSubclip(false);
+      console.log("Exiting subclip preview mode due to stop");
+    }
   };
 
   const handleSkipBackward = () => {
@@ -313,6 +355,16 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
     const time = videoRef.current.currentTime;
     setMarkOut(time);
     console.log(`Marked OUT point at ${time.toFixed(2)}s`);
+
+    // Move playhead slightly before the mark out point to allow for immediate playback
+    if (markIn !== null && markIn < time - 0.2) {
+      const newPosition = time - 0.2;
+      videoRef.current.currentTime = newPosition;
+      setCurrentTime(newPosition);
+      console.log(
+        `Moved playhead to ${newPosition.toFixed(2)}s for better playback control`,
+      );
+    }
   };
 
   const handlePreviewSubclip = () => {
@@ -328,6 +380,10 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
 
     // Set video to mark in point
     videoRef.current.currentTime = markIn;
+
+    // Set preview mode to true - this will enable stopping at mark out
+    setIsPreviewingSubclip(true);
+    console.log("Entering subclip preview mode");
 
     // No need to manipulate border during preview as it's now part of the container
 
@@ -347,6 +403,7 @@ const CloudinaryVideoEditor: React.FC<CloudinaryVideoEditorProps> = ({
           })
           .catch((error) => {
             console.error("Error playing subclip:", error);
+            setIsPreviewingSubclip(false); // Reset preview mode on error
           });
       }
     }, 100);

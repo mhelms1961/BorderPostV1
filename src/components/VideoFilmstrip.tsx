@@ -542,6 +542,7 @@ export default function VideoFilmstrip({
     if (!video) return;
 
     if (video.paused) {
+      // If we're at the end time, continue from current position (don't jump back)
       video.play().catch((err) => console.error("Error playing video:", err));
     } else {
       video.pause();
@@ -718,16 +719,19 @@ export default function VideoFilmstrip({
       return;
     }
 
-    // Set video to start time
-    video.currentTime = startTime;
-    if (onSeek) onSeek(startTime);
+    // If current time is already at the end time, set it to start time
+    // Otherwise, if current time is within the subclip range, continue from current position
+    if (video.currentTime >= endTime || video.currentTime < startTime) {
+      video.currentTime = startTime;
+      if (onSeek) onSeek(startTime);
+    }
 
     // Play the video
     video
       .play()
       .then(() =>
         console.log(
-          `Playing subclip from ${startTime.toFixed(2)}s to ${endTime.toFixed(2)}s (duration: ${(endTime - startTime).toFixed(2)}s)`,
+          `Playing subclip from ${video.currentTime.toFixed(2)}s to ${endTime.toFixed(2)}s (duration: ${(endTime - video.currentTime).toFixed(2)}s)`,
         ),
       )
       .catch((err) => console.error("Error playing video:", err));
@@ -750,8 +754,29 @@ export default function VideoFilmstrip({
 
     if (video.currentTime >= endTime) {
       video.pause();
+      // Set the current time exactly to the end time to ensure we stop on that frame
+      video.currentTime = endTime;
+      if (onSeek) onSeek(endTime);
       video.removeEventListener("timeupdate", checkTimeFunction);
       console.log(`✅ Reached end of subclip at ${endTime.toFixed(2)}s`);
+
+      // Add a message to indicate how to continue playback
+      const message = document.createElement("div");
+      message.textContent =
+        "Preview complete. Click play to continue from this point.";
+      message.className =
+        "absolute top-2 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-3 py-1 rounded text-sm";
+      message.style.zIndex = "50";
+
+      const videoContainer = video.parentElement;
+      if (videoContainer) {
+        videoContainer.appendChild(message);
+        setTimeout(() => {
+          if (videoContainer.contains(message)) {
+            videoContainer.removeChild(message);
+          }
+        }, 3000);
+      }
     }
   };
 
